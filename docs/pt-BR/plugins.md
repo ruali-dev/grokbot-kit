@@ -90,9 +90,11 @@ plugin precisa daquela capacidade. `plugin show` e `doctor` mostram a mesma tabe
 | `claude` | `tool` | `unsupported` | `tool` | `tool` | `tool` |
 | `opencode` | `tool` | `unsupported` | `tool` | `tool` | `tool` |
 | `codex` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` |
+| `dsh` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` |
 
 Uma CLI sem `write` ou sem `workspace_config` não roda plugin nenhum. O Codex só confina escrita e rede com o sandbox
-`bwrap` dele, que não sobe num host assim (`codex sandbox -- true` falha), então não roda plugin.
+`bwrap` dele, que não sobe num host assim (`codex sandbox -- true` falha), então não roda plugin. O DeepSeek Harness
+(`dsh`) não tem harness de plugin na v1, então também não roda plugin.
 
 `tool` barra as ferramentas de arquivo do próprio agente e o próprio shell: redirecionamento, encadeamento com `;`, `&&`
 ou `||`, pipe e substituição de comando são negados, então só um comando liberado roda, sozinho. Um comando liberado

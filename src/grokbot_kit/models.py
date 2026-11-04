@@ -15,6 +15,8 @@ from grokbot_kit import config, terminal
 from grokbot_kit.payload import rfc3339
 
 CLAUDE_ALIASES = ("haiku", "sonnet", "opus")
+DSH_MODELS = ("deepseek-flash", "deepseek-chat")
+DSH_DEFAULT_MODEL = DSH_MODELS[0]
 PROBE_PROMPT = "Reply with exactly the word ok. Do not use any tool."
 PROBE_TIMEOUT = 300
 
@@ -94,6 +96,13 @@ def _probe(tool: str, cli: dict[str, Any], model: str) -> str | None:
 def discover(tool: str, cli: dict[str, Any], add: list[str]) -> Discovery:
     if tool == "opencode":
         return _opencode(cli)
+    if tool == "dsh":
+        # o headless não lista modelos: o catálogo conhecido é a checagem leve do `--add`
+        rejected = [
+            (model, f"not a known dsh id ({', '.join(DSH_MODELS)})") for model in add if model not in DSH_MODELS
+        ]
+        accepted = [model for model in add if model in DSH_MODELS]
+        return Discovery(list(dict.fromkeys([*DSH_MODELS, *accepted])), rejected, False)
     known = list(CLAUDE_ALIASES) if tool == "claude" else []
     candidates = list(dict.fromkeys(m for m in [*cli.get("models", []), *add] if m not in known))
     ids, rejected = known, []

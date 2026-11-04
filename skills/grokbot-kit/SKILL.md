@@ -1,11 +1,11 @@
 ---
 name: grokbot-kit
-description: Instala e configura o grokbot-kit e delega tarefas a agentes de código headless, acordando a routine deste bot quando a tarefa termina ou precisa de permissão. Use quando o usuário disser "configurar grokbot-kit", "delegar para opencode/claude/codex" ou "rodar tarefa headless".
+description: Instala e configura o grokbot-kit e delega tarefas a agentes de código headless, acordando a routine deste bot quando a tarefa termina ou precisa de permissão. Use quando o usuário disser "configurar grokbot-kit", "delegar para opencode/claude/codex/dsh" ou "rodar tarefa headless".
 ---
 
 # grokbot-kit
 
-O `grokbot-kit` roda uma tarefa num agente de código headless (`opencode`, `claude` ou `codex`) e, quando ela termina
+O `grokbot-kit` roda uma tarefa num agente de código headless (`opencode`, `claude`, `codex` ou `dsh`) e, quando ela termina
 ou esbarra numa permissão, acorda a routine deste bot com um evento JSON. Esta skill faz o setup na primeira vez e
 depois delega as tarefas. O próximo passo é sempre um comando `grokbot-kit`.
 
@@ -14,7 +14,7 @@ diretório de workflows do Grok Bot; no box, `/home/box/agent-data/workflows/gro
 
 ## Regras
 
-- Só chame `grokbot-kit`, `uv` ou `pipx` (para instalar o kit) e as CLIs oficiais `opencode`, `claude` e `codex`.
+- Só chame `grokbot-kit`, `uv` ou `pipx` (para instalar o kit) e as CLIs oficiais `opencode`, `claude`, `codex` e `dsh`.
   Nada de editar o config à mão, `curl` ou scripts próprios.
 - Nunca invente um id de modelo, um comando ou uma flag. Use só o que esta skill cita e o que o `--help` do
   `grokbot-kit` mostra; um id de modelo só existe depois que `grokbot-kit setup models refresh` o descobriu.
@@ -84,7 +84,7 @@ rotas e os segredos; `problems` lista o que corrigir, com o comando. Pule os pas
 ### 3. CLIs e login
 
 Com `setup.installed` vazio no `grokbot-kit doctor --json`, faça uma única pergunta de múltipla escolha: quais CLIs instalar entre `opencode`,
-`claude` e `codex` (o `opencode` tem modelos gratuitos e não exige login para eles).
+`claude`, `codex` e `dsh` (o `opencode` tem modelos gratuitos e não exige login para eles).
 
 Para cada CLI escolhida, instale com `grokbot-kit setup cli add <tool>`, que usa o instalador oficial:
 
@@ -105,6 +105,10 @@ Depois, para cada CLI, pergunte o método de login: assinatura ou API key.
   que a CLI pedir.
 - API key: peça a key no campo mascarado de segredos (nunca no chat) e grave-a pela entrada padrão de
   `grokbot-kit secret set <tool>-api-key`; depois rode `grokbot-kit login <tool> --method api-key`.
+
+O `dsh` não tem login por assinatura: use `grokbot-kit login dsh --method api-key`, que grava a key no `.env` do
+Harness sem mostrá-la. O perfil `headless` roda com `DSH_PERMISSION_MODE=danger-full-access` e o modelo padrão é o
+Flash; a v1 não troca o modelo do perfil, então não passe `--model` para ele.
 
 ```sh
 grokbot-kit login <tool> --method subscription
@@ -131,7 +135,7 @@ grokbot-kit setup models refresh --json
 ```
 
 A saída é um objeto JSON: `models` traz um item por modelo descoberto, com `tool` (a CLI), `id` e `provider` (no
-opencode, o provedor do id; no `claude` e no `codex`, `null`). Use só ids da lista descoberta.
+opencode, o provedor do id; no `claude`, no `codex` e no `dsh`, `null`). Use só ids da lista descoberta.
 
 Com o `opencode` instalado, faça uma única pergunta de múltipla escolha com os provedores do opencode: os valores
 distintos do campo `provider` nos itens do `opencode`, cada um com quantos ids ele tem na lista (por exemplo,
@@ -165,7 +169,7 @@ O que recomendar primeiro em cada pergunta:
 Quando o usuário pedir para trocar os modelos, refaça só este passo: `grokbot-kit setup models refresh --json`, a
 pergunta de provedores e as perguntas dos tiers. As CLIs, o acesso delas e a routine ficam como estão.
 
-Se o usuário quiser no `claude` ou no `codex` um id que não está na lista, teste e grave com
+Se o usuário quiser no `claude`, no `codex` ou no `dsh` um id que não está na lista, teste e grave com
 `grokbot-kit setup models refresh <tool> --add <id>` antes de usá-lo; um id recusado não entra.
 
 ### 6. Routine do bot

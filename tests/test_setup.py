@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from conftest import Kit, write_secret
+from conftest import FAKES, Kit, write_secret
 
 from grokbot_kit import config, setup
 
@@ -108,6 +108,55 @@ def test_cli_add_exit_codes_and_bin_layer(tmp_path: Path) -> None:
     assert codex.argv == ["sh", "-c", "curl -fsSL https://chatgpt.com/codex/install.sh | sh"]
     assert codex.env == {"CODEX_HOME": str(codex_home), "CODEX_INSTALL_DIR": str(tmp_path / ".grokbot-kit" / "bin")}
     assert codex.bin == tmp_path / ".grokbot-kit" / "bin" / "codex"
+
+
+def test_cli_add_dsh_detects_binary_and_seeds_flash(fresh: Kit, tmp_path: Path) -> None:
+    bin_dir = tmp_path / "dsh-bin"
+    bin_dir.mkdir()
+    (bin_dir / "dsh").symlink_to(FAKES / "dsh")
+    result = cli(fresh, "setup", "cli", "add", "dsh", PATH=f"{bin_dir}{os.pathsep}{fresh.env['PATH']}")
+    assert result.returncode == 0, result.stderr
+    cfg = fresh.config()
+    assert cfg["cli"]["dsh"]["bin"] == str(bin_dir / "dsh")
+    assert cfg["cli"]["dsh"]["models"] == ["deepseek-flash"]
+    assert cfg["cli"]["dsh"]["tiers"] == {tier: ["deepseek-flash"] for tier in ("trivial", "standard", "complex")}
+    assert "dsh" in cfg["setup"]["installed"]
+    assert [c["argv"] for c in calls_of(fresh, "dsh")] == [["-V"]]
+
+
+def test_cli_add_dsh_missing_binary_points_at_install_notes(fresh: Kit) -> None:
+    result = cli(fresh, "setup", "cli", "add", "dsh")
+    assert result.returncode == 1
+    assert "DeepSeek Harness" in result.stderr and "Node.js 24" in result.stderr
+    assert not (fresh.home / ".config" / "grokbot-kit" / "config.toml").exists()
+
+
+def test_cli_add_dsh_version_failure_keeps_config(fresh: Kit, tmp_path: Path) -> None:
+    bin_dir = tmp_path / "dsh-bin"
+    bin_dir.mkdir()
+    (bin_dir / "dsh").symlink_to(FAKES / "dsh")
+    result = cli(
+        fresh,
+        "setup",
+        "cli",
+        "add",
+        "dsh",
+        PATH=f"{bin_dir}{os.pathsep}{fresh.env['PATH']}",
+        FAKE_VERSION_EXIT="1",
+    )
+    assert result.returncode == 1
+    assert not (fresh.home / ".config" / "grokbot-kit" / "config.toml").exists()
+
+
+def test_cli_add_dsh_installer_detection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(setup.shutil, "which", lambda name: None)
+    missing = setup.installer("dsh", tmp_path, tmp_path / "ch")
+    assert (missing.argv, missing.env, missing.bin) == ([], {}, tmp_path / ".local" / "bin" / "dsh")
+    local = tmp_path / ".local" / "bin"
+    local.mkdir(parents=True)
+    (local / "dsh").write_text("", encoding="utf-8")
+    found = setup.installer("dsh", tmp_path, tmp_path / "ch")
+    assert (found.argv, found.env, found.bin) == ([], {}, local / "dsh")
 
 
 def test_cli_add_exit_codes_and_bin_default(fresh: Kit) -> None:
@@ -211,6 +260,43 @@ def test_login_claude_methods_and_env_scope(fresh: Kit) -> None:
 
     assert cli(fresh, "login", "claude").returncode == 0
     assert "api_key_secret" not in fresh.config()["cli"]["claude"]
+
+
+def test_login_dsh_api_key_env(fresh: Kit) -> None:
+    assert cli(fresh, "login", "dsh", "--method", "api-key").returncode == 1
+    key = "sk-dsh-test-not-real"
+    write_secret(fresh.home, "dsh-api-key", key + "\n")
+    result = cli(fresh, "login", "dsh", "--method", "api-key")
+    assert result.returncode == 0, result.stderr
+    env_file = fresh.home / ".dsh" / ".env"
+    assert key in env_file.read_text(encoding="utf-8")
+    assert (env_file.stat().st_mode & 0o777) == 0o600
+    assert key not in result.stdout + result.stderr
+    assert not (fresh.home / ".config" / "grokbot-kit" / "config.toml").exists()
+
+    (fresh.home / ".secrets" / "grokbot-kit" / "dsh-api-key").unlink()
+    again = cli(fresh, "login", "dsh", "--method", "api-key")
+    assert again.returncode == 0, again.stderr
+    assert "already configured" in again.stdout
+    assert key not in again.stdout + again.stderr
+
+    assert cli(fresh, "login", "dsh").returncode == 1
+
+
+def test_login_dsh_api_key_custom_home_preserves_env(fresh: Kit) -> None:
+    custom = fresh.home / "outro-dsh"
+    custom.mkdir()
+    env_file = custom / ".env"
+    env_file.write_text("OUTRA=1\n", encoding="utf-8")
+    key = "sk-dsh-outro-not-real"
+    write_secret(fresh.home, "outra-key", key + "\n")
+    result = cli(fresh, "login", "dsh", "--method", "api-key", "--secret", "outra-key", DSH_HOME=str(custom))
+    assert result.returncode == 0, result.stderr
+    text = env_file.read_text(encoding="utf-8")
+    assert "OUTRA=1" in text and f"DEEPSEEK_API_KEY={key}" in text
+    assert (env_file.stat().st_mode & 0o777) == 0o600
+    assert key not in result.stdout + result.stderr
+    assert not (fresh.home / ".dsh" / ".env").exists()
 
 
 def test_login_claude_methods_and_env_scope_bad_secret(fresh: Kit) -> None:

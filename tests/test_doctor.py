@@ -12,7 +12,12 @@ from conftest import Kit, Receiver, closed_port_url, default_config, write_plugi
 
 from grokbot_kit import __version__, doctor
 
-STATUS_COMMAND = {"claude": "claude auth status", "codex": "codex login status", "opencode": "opencode auth list"}
+STATUS_COMMAND = {
+    "claude": "claude auth status",
+    "codex": "codex login status",
+    "opencode": "opencode auth list",
+    "dsh": "grokbot-kit login dsh --method api-key",
+}
 
 
 def run_doctor(kit: Kit, *args: str, **extra: str) -> subprocess.CompletedProcess[str]:
@@ -57,13 +62,13 @@ def test_fields_and_exit_codes(kit: Kit) -> None:
     assert out["kit"]["version"] == __version__
     assert out["python"]["version"] == kit_python_version()
     assert os.path.isabs(out["python"]["executable"])
-    assert out["setup"] == {"installed": ["opencode", "claude", "codex"], "default_cli": "opencode"}
-    assert set(out["cli"]) == {"opencode", "claude", "codex"}
+    assert out["setup"] == {"installed": ["opencode", "claude", "codex", "dsh"], "default_cli": "opencode"}
+    assert set(out["cli"]) == {"opencode", "claude", "codex", "dsh"}
     for tool, cli in out["cli"].items():
         assert cli["version"] == f"9.9.9 ({tool} fake)"
         assert cli["login"]["command"] == STATUS_COMMAND[tool]
         assert cli["login"]["logged_in"] is True
-        assert cli["login"]["method"] == "subscription"
+        assert cli["login"]["method"] == ("api-key" if tool == "dsh" else "subscription")
         assert cli["default"] is (tool == "opencode")
         assert cli["tiers"] == {"trivial": 0, "standard": 1, "complex": 0}
     assert out["routes"] == {"bot-a": ["arquivo"]}
@@ -96,6 +101,26 @@ def test_fields_and_exit_codes_logged_out(kit: Kit, tool: str) -> None:
     assert code == 1
     assert out["cli"][tool]["login"]["logged_in"] is False
     assert any(tool in p and "grokbot-kit login" in p for p in out["problems"])
+
+
+def test_fields_and_exit_codes_dsh_login_env(kit: Kit) -> None:
+    assert kit.cli("install", "opencode").returncode == 0
+    (kit.home / ".dsh" / ".env").unlink()
+    code, out = report(kit, DEEPSEEK_API_KEY="")
+    assert code == 1
+    assert out["cli"]["dsh"]["login"] == {
+        "command": "grokbot-kit login dsh --method api-key",
+        "method": "api-key",
+        "logged_in": False,
+    }
+    assert any("grokbot-kit login dsh --method api-key" in p for p in out["problems"])
+
+    (kit.home / ".dsh" / ".env").write_text("OUTRA=1\nDEEPSEEK_API_KEY=nao-mostrar\n", encoding="utf-8")
+    (kit.home / ".dsh" / ".env").chmod(0o600)
+    code, out = report(kit)
+    assert code == 0, out
+    assert out["cli"]["dsh"]["login"]["logged_in"] is True
+    assert "nao-mostrar" not in json.dumps(out)
 
 
 def test_fields_and_exit_codes_opencode_free(kit: Kit) -> None:

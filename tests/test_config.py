@@ -150,3 +150,13 @@ def test_load_ignores_providers(kit: Kit, monkeypatch: pytest.MonkeyPatch) -> No
     cfg["cli"]["opencode"]["tiers"] = {"standard": ["opencode/a-free"]}
     write(kit, cfg)
     assert config.load() == cfg
+
+
+# dsh: o modo de permissão sempre vai no env; o DSH_HOME só quando o config o fixa
+def test_cli_env_dsh_permission_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DSH_HOME", raising=False)
+    assert config.cli_env("dsh", {}) == {"DSH_PERMISSION_MODE": "danger-full-access"}
+    assert config.cli_env("dsh", {"dsh_home": "/srv/dsh"}) == {
+        "DSH_PERMISSION_MODE": "danger-full-access",
+        "DSH_HOME": "/srv/dsh",
+    }

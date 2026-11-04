@@ -190,17 +190,43 @@ def test_codex_accepted_ids_only_discover_layer(monkeypatch: pytest.MonkeyPatch,
 
 
 def test_codex_accepted_ids_only_no_tool_refreshes_installed(kit: Kit, tmp_path: Path) -> None:
-    kit.write_config(kit.config_text().replace('installed = ["opencode", "claude", "codex"]', 'installed = ["codex"]'))
+    kit.write_config(
+        kit.config_text().replace('installed = ["opencode", "claude", "codex", "dsh"]', 'installed = ["codex"]')
+    )
     kit.write_config(kit.config_text().replace('default_cli = "opencode"', 'default_cli = "codex"'))
     result = refresh(kit, tmp_path, FAKE_ACCEPT_MODELS=json.dumps(["gpt-test"]))
     assert result.returncode == 0, result.stderr
     assert {c["tool"] for c in calls(tmp_path / "calls.jsonl")} == {"codex"}
 
 
+# C106b - dsh: catálogo conhecido, sem `dsh models`
+def test_dsh_known_ids_and_add(kit: Kit, tmp_path: Path) -> None:
+    result = refresh(kit, tmp_path, "dsh", "--add", "deepseek-flash", "--add", "inventado-123")
+    assert result.returncode == 1
+    assert "inventado-123" in result.stderr
+    assert read_config(kit)["cli"]["dsh"]["models"] == ["deepseek-flash", "deepseek-chat"]
+    assert calls(tmp_path / "calls.jsonl") == []
+
+    accepted = refresh(kit, tmp_path, "dsh", "--add", "deepseek-chat")
+    assert accepted.returncode == 0, accepted.stderr
+    assert read_config(kit)["cli"]["dsh"]["models"] == ["deepseek-flash", "deepseek-chat"]
+
+
+def test_dsh_known_ids_and_add_json(kit: Kit, tmp_path: Path) -> None:
+    result = refresh(kit, tmp_path, "dsh", "--json")
+    assert result.returncode == 0, result.stderr
+    assert json_items(result.stdout) == [
+        {"tool": "dsh", "id": "deepseek-flash", "provider": None},
+        {"tool": "dsh", "id": "deepseek-chat", "provider": None},
+    ]
+
+
 # model-setup-docs: `--json` com o `provider` de cada id (door 1)
 def opencode_and_claude(kit: Kit) -> None:
     kit.write_config(
-        kit.config_text().replace('installed = ["opencode", "claude", "codex"]', 'installed = ["opencode", "claude"]')
+        kit.config_text().replace(
+            'installed = ["opencode", "claude", "codex", "dsh"]', 'installed = ["opencode", "claude"]'
+        )
     )
 
 

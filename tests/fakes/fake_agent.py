@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI falsa: faz o papel de `claude`, `opencode` ou `codex` (pelo nome do link) nos testes do `run`.
+"""CLI falsa: faz o papel de `claude`, `opencode`, `codex` ou `dsh` (pelo nome do link) nos testes do `run`.
 
 Comportamento por env: `FAKE_RECORD` (grava argv, stdin, env e cwd), `FAKE_STDOUT` (saída), `FAKE_LAST_MESSAGE`
 (conteúdo do `-o` do codex), `FAKE_NEEDS_INPUT=1` (registra um `needs_input` no task dir; um objeto JSON no lugar
@@ -12,7 +12,7 @@ Descoberta de modelos: `opencode models` imprime `FAKE_OPENCODE_MODELS` e sai co
 ids da lista e recusam os outros com erro de modelo e exit `1`; os ids de `FAKE_ERROR_EXIT0` saem com `0` e erro na
 saída JSON. `FAKE_CALLS` acumula uma linha JSON por chamada (argv, stdin, cwd e `CODEX_HOME`).
 
-Setup e login: `--version` imprime `9.9.9 (<tool> fake)` e sai com `FAKE_VERSION_EXIT`; `claude auth login`,
+Setup e login: `--version` (e `-V`, do dsh) imprime `9.9.9 (<tool> fake)` e sai com `FAKE_VERSION_EXIT`; `claude auth login`,
 `opencode auth login` e `codex login --device-auth|--with-api-key` saem com `FAKE_LOGIN_EXIT` (o `codex login`
 grava `auth.json` em `CODEX_HOME`, ou em `~/.codex` sem ele, como a CLI real); `claude auth status` e
 `codex login status` saem com `1` quando a tool está em `FAKE_LOGGED_OUT` (lista separada por vírgula) e `0` senão;
@@ -100,7 +100,7 @@ if tool == "codex":
         os.makedirs(os.path.join(codex_dir, "tmp"), exist_ok=True)
 
 logged_out = os.environ.get("FAKE_LOGGED_OUT", "").split(",")
-if args == ["--version"]:
+if args in (["--version"], ["-V"]):
     print(f"9.9.9 ({tool} fake)")
     sys.exit(int(os.environ.get("FAKE_VERSION_EXIT", "0")))
 if (tool, args[:2]) in (("claude", ["auth", "login"]), ("opencode", ["auth", "login"])):
@@ -150,7 +150,8 @@ if record:
                 "env": {
                     k: v
                     for k, v in os.environ.items()
-                    if k.startswith(("GROKBOT_KIT_", "OPENCODE_")) or k in ("CODEX_HOME", "ANTHROPIC_API_KEY", "PWD")
+                    if k.startswith(("GROKBOT_KIT_", "OPENCODE_"))
+                    or k in ("CODEX_HOME", "ANTHROPIC_API_KEY", "PWD", "DSH_HOME", "DSH_PERMISSION_MODE")
                 },
                 "cwd": os.getcwd(),
             },
@@ -184,5 +185,15 @@ if trap:
         subprocess.Popen([sys.executable, os.path.realpath(__file__)], env={**os.environ, "FAKE_ROLE": "child"})
 hold(float(by_model("SLEEP", os.environ.get("FAKE_SLEEP", "0")) or "0"))
 
-sys.stdout.write(by_model("STDOUT", os.environ.get("FAKE_STDOUT", "")) or "")
+default_stdout = os.environ.get("FAKE_STDOUT")
+if default_stdout is None and tool == "dsh":
+    default_stdout = "".join(
+        json.dumps(event) + "\n"
+        for event in (
+            {"type": "session", "sessionId": "session-fake", "cwd": os.getcwd()},
+            {"type": "status", "phase": "turn_end", "turn": 1, "reason": {"kind": "completed"}},
+            {"type": "final", "text": "feito"},
+        )
+    )
+sys.stdout.write(by_model("STDOUT", default_stdout or "") or "")
 sys.exit(int(by_model("EXIT", os.environ.get("FAKE_EXIT", "0")) or "0"))

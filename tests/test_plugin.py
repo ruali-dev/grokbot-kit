@@ -24,7 +24,7 @@ from grokbot_kit import plugin
 
 DOOR_4_KEYS = {"name", "version", "description", "source", "origin", "commit", "inputs", "capabilities", "support"}
 CAPABILITIES = {"write", "network", "commands", "workspace_config", "skills"}
-CLIS = {"claude", "opencode", "codex"}
+CLIS = {"claude", "opencode", "codex", "dsh"}
 RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 

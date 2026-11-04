@@ -91,7 +91,7 @@ def test_guide_sections(g: Guide) -> None:
     ):
         assert needle in manifest, needle
 
-    rows = re.findall(r"^\| `(claude|opencode|codex)` \| (.*) \|$", section(text, g.matrix), re.MULTILINE)
+    rows = re.findall(r"^\| `(claude|opencode|codex|dsh)` \| (.*) \|$", section(text, g.matrix), re.MULTILINE)
     table = {cli: [cell.strip(" `") for cell in cells.split("|")] for cli, cells in rows}
     assert table == {cli: [cells[c] for c in plugin.MATRIX_COLUMNS] for cli, cells in plugin.matrix().items()}
 

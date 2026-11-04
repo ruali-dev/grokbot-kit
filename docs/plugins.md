@@ -90,9 +90,11 @@ that capability. `plugin show` and `doctor` show the same table.
 | `claude` | `tool` | `unsupported` | `tool` | `tool` | `tool` |
 | `opencode` | `tool` | `unsupported` | `tool` | `tool` | `tool` |
 | `codex` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` |
+| `dsh` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` |
 
 A CLI without `write` or without `workspace_config` runs no plugin at all. Codex confines writes and network only
 with its `bwrap` sandbox, which does not start on such a host (`codex sandbox -- true` fails), so it runs no plugin.
+DeepSeek Harness (`dsh`) has no plugin harness in v1, so it runs no plugin either.
 
 `tool` stops the agent's own file tools and the shell itself: output redirection, chaining with `;`, `&&` or `||`, pipes
 and command substitution are denied, so only an allowed command runs, alone. An allowed command writes wherever its

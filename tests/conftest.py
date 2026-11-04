@@ -18,10 +18,10 @@ import pytest
 
 FAKES = Path(__file__).resolve().parent / "fakes"
 
-MODELS = {"claude": "sonnet", "opencode": "opencode/free-model", "codex": "gpt-test"}
+MODELS = {"claude": "sonnet", "opencode": "opencode/free-model", "codex": "gpt-test", "dsh": "deepseek-flash"}
 
 
-def default_config(sink: Path, installed: tuple[str, ...] = ("opencode", "claude", "codex")) -> str:
+def default_config(sink: Path, installed: tuple[str, ...] = ("opencode", "claude", "codex", "dsh")) -> str:
     lines = [
         "[setup]",
         "version = 1",
@@ -128,6 +128,11 @@ def kit(tmp_path: Path) -> Kit:
     }
     k = Kit(home=home, sink=tmp_path / "sink.jsonl", record=tmp_path / "launched.json", env=env)
     k.write_config(default_config(k.sink))
+    # o `doctor` considera o dsh logado quando o `.env` do Harness tem a key; o dsh não tem `login status`
+    dsh = home / ".dsh"
+    dsh.mkdir(mode=0o700)
+    (dsh / ".env").write_text("DEEPSEEK_API_KEY=test-not-real\n", encoding="utf-8")
+    (dsh / ".env").chmod(0o600)
     return k
 
 

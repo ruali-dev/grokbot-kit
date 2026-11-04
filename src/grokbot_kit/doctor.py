@@ -65,26 +65,30 @@ def _plugin() -> dict[str, Any]:
 
 def _cli(tool: str, cli: dict[str, Any], default: str | None) -> dict[str, Any]:
     bin_path = os.path.expanduser(str(cli.get("bin", tool)))
-    method = "api-key" if tool == "claude" and "api_key_secret" in cli else "subscription"
+    method = "api-key" if tool in ("claude", "dsh") and (tool == "dsh" or "api_key_secret" in cli) else "subscription"
     try:
         env = {**os.environ, **config.cli_env(tool, cli)}
     except config.ConfigError:
         env = dict(os.environ)
-    version = _call([bin_path, "--version"], env)
-    status = _call([bin_path, *STATUS_ARGV[tool]], env)
+    version = _call([bin_path, "-V" if tool == "dsh" else "--version"], env)
+    login_command = "grokbot-kit login dsh --method api-key" if tool == "dsh" else " ".join([tool, *STATUS_ARGV[tool]])
     logged_in: bool | None
-    if status is None:
-        logged_in = None
-    elif tool == "opencode":
-        logged_in = _opencode_logged_in(status) if status.returncode == 0 else None
+    if tool == "dsh":
+        logged_in = config.dsh_api_key_present(cli)
     else:
-        logged_in = status.returncode == 0
+        status = _call([bin_path, *STATUS_ARGV[tool]], env)
+        if status is None:
+            logged_in = None
+        elif tool == "opencode":
+            logged_in = _opencode_logged_in(status) if status.returncode == 0 else None
+        else:
+            logged_in = status.returncode == 0
     tiers = cli.get("tiers", {})
     entry = {
         "bin": bin_path,
         "version": (version.stdout.strip().splitlines() or [""])[0] if version and version.returncode == 0 else None,
         "default": tool == default,
-        "login": {"command": " ".join([tool, *STATUS_ARGV[tool]]), "method": method, "logged_in": logged_in},
+        "login": {"command": login_command, "method": method, "logged_in": logged_in},
         "tiers": {tier: len(tiers.get(tier, [])) for tier in TIERS},
     }
     if tool == "opencode":
@@ -124,6 +128,8 @@ def problems(out: dict[str, Any], facts: dict[str, Any]) -> list[str]:
         logged_in = cli["login"]["logged_in"]
         if logged_in is None and tool == "opencode":
             found.append(f"{cli['login']['command']} failed")
+        elif not logged_in and tool == "dsh":
+            found.append("dsh is not logged in; run: grokbot-kit login dsh --method api-key")
         elif not logged_in and tool != "opencode":
             found.append(f"{tool} is not logged in; run: grokbot-kit login {tool}")
         plugin = cli.get("plugin")

@@ -21,6 +21,22 @@ CLAUDE_OK = json.dumps(
 )
 OPENCODE_OK = json.dumps({"type": "text", "sessionID": "ses_1", "part": {"type": "text", "text": "feito"}}) + "\n"
 CODEX_OK = json.dumps({"type": "thread.started", "thread_id": "t1"}) + "\n" + json.dumps({"type": "turn.completed"})
+DSH_OK = "\n".join(
+    [
+        json.dumps({"type": "session", "sessionId": "session-1", "cwd": "/w"}),
+        json.dumps({"type": "text", "text": "rascunho"}),
+        json.dumps({"type": "status", "phase": "turn_end", "turn": 1, "reason": {"kind": "completed"}}),
+        json.dumps({"type": "final", "text": "feito"}),
+    ]
+)
+DSH_ERROR = json.dumps(
+    {
+        "type": "status",
+        "phase": "turn_end",
+        "turn": 1,
+        "reason": {"kind": "error", "error": {"code": "AUTH", "message": "boom"}},
+    }
+)
 
 CLEAN = AgentOutput(error=False, permission_denied=False, summary="")
 
@@ -45,7 +61,10 @@ def test_ok_on_clean_exit_layer() -> None:
     assert terminal.classify(0, CLEAN, needs_input=False) == ("completed", "ok", "success")
 
 
-@pytest.mark.parametrize(("tool", "stdout"), [("claude", CLAUDE_OK), ("opencode", OPENCODE_OK), ("codex", CODEX_OK)])
+@pytest.mark.parametrize(
+    ("tool", "stdout"),
+    [("claude", CLAUDE_OK), ("opencode", OPENCODE_OK), ("codex", CODEX_OK), ("dsh", DSH_OK)],
+)
 def test_ok_on_clean_exit_cli(kit: Kit, tool: str, stdout: str) -> None:
     code, event = run_task_with(kit, tool, {"FAKE_STDOUT": stdout, "FAKE_LAST_MESSAGE": "feito"})
     assert outcome(event) == ("completed", "ok", "success")
@@ -60,7 +79,10 @@ def test_denied_on_recorded_needs_input_layer() -> None:
     assert terminal.classify(0, CLEAN, needs_input=True) == ("completed", "denied", "permission_denied")
 
 
-@pytest.mark.parametrize(("tool", "stdout"), [("claude", CLAUDE_OK), ("opencode", OPENCODE_OK), ("codex", CODEX_OK)])
+@pytest.mark.parametrize(
+    ("tool", "stdout"),
+    [("claude", CLAUDE_OK), ("opencode", OPENCODE_OK), ("codex", CODEX_OK), ("dsh", DSH_OK)],
+)
 def test_denied_on_recorded_needs_input_cli(kit: Kit, tool: str, stdout: str) -> None:
     code, event = run_task_with(kit, tool, {"FAKE_STDOUT": stdout, "FAKE_NEEDS_INPUT": "1"})
     assert outcome(event) == ("completed", "denied", "permission_denied")
@@ -98,6 +120,8 @@ ERROR_OUTPUTS = {
     "codex turn.failed": ("codex", json.dumps({"type": "turn.failed", "error": {"message": "boom"}})),
     "codex error": ("codex", json.dumps({"type": "error", "message": "boom"})),
     "opencode error": ("opencode", json.dumps({"type": "error", "error": {"name": "UnknownError"}})),
+    "dsh error": ("dsh", json.dumps({"type": "error", "message": "boom"})),
+    "dsh turn_end": ("dsh", DSH_ERROR),
 }
 
 
@@ -114,6 +138,21 @@ def test_error_table_all_5_conditions_output_layer(tmp_path: Path, case: str) ->
 def test_error_table_all_5_conditions_nonzero_layer() -> None:
     assert terminal.classify(1, CLEAN, needs_input=False) == ("error", "failed", "nonzero_exit")
     assert terminal.classify(3, CLEAN, needs_input=True) == ("error", "failed", "nonzero_exit")
+
+
+def test_dsh_final_text_and_session(tmp_path: Path) -> None:
+    (tmp_path / "out.jsonl").write_text(DSH_OK + "\n", encoding="utf-8")
+    output = terminal.read_output("dsh", tmp_path)
+    assert output.summary == "feito"
+    assert output.session_id == "session-1"
+    assert output.error is False
+
+
+def test_dsh_turn_end_error_summary(tmp_path: Path) -> None:
+    (tmp_path / "out.jsonl").write_text(DSH_ERROR + "\n", encoding="utf-8")
+    output = terminal.read_output("dsh", tmp_path)
+    assert output.error is True
+    assert output.summary == "AUTH: boom"
 
 
 @pytest.mark.parametrize("case", sorted(ERROR_OUTPUTS))
@@ -150,13 +189,21 @@ def write_summary_source(task_dir: Path, tool: str, text: str) -> None:
         out = json.dumps({"type": "result", "is_error": False, "result": text, "permission_denials": []})
     elif tool == "opencode":
         out = opencode_text("rascunho", text)
+    elif tool == "dsh":
+        out = "\n".join(
+            [
+                json.dumps({"type": "session", "sessionId": "s", "cwd": "/w"}),
+                json.dumps({"type": "text", "text": "rascunho"}),
+                json.dumps({"type": "final", "text": text}),
+            ]
+        )
     else:
         out = CODEX_OK
         (task_dir / "last-message.txt").write_text(text, encoding="utf-8")
     (task_dir / "out.jsonl").write_text(out, encoding="utf-8")
 
 
-@pytest.mark.parametrize("tool", ["claude", "opencode", "codex"])
+@pytest.mark.parametrize("tool", ["claude", "opencode", "codex", "dsh"])
 @pytest.mark.parametrize(("size", "expected"), [(1999, 1999), (2000, 2000), (2001, 2000)])
 def test_summary_source_per_tool_and_2000_bound_layer(tmp_path: Path, tool: str, size: int, expected: int) -> None:
     text = "é" * (size - 1) + "z"
@@ -164,13 +211,15 @@ def test_summary_source_per_tool_and_2000_bound_layer(tmp_path: Path, tool: str,
     assert terminal.read_output(tool, tmp_path).summary == text[:expected]
 
 
-@pytest.mark.parametrize("tool", ["claude", "opencode", "codex"])
+@pytest.mark.parametrize("tool", ["claude", "opencode", "codex", "dsh"])
 def test_summary_source_per_tool_and_2000_bound_cli(kit: Kit, tool: str) -> None:
     text = "r" * 2001
     if tool == "claude":
         fake = {"FAKE_STDOUT": json.dumps({"type": "result", "is_error": False, "result": text})}
     elif tool == "opencode":
         fake = {"FAKE_STDOUT": opencode_text("rascunho", text)}
+    elif tool == "dsh":
+        fake = {"FAKE_STDOUT": DSH_OK.replace("feito", text)}
     else:
         fake = {"FAKE_STDOUT": CODEX_OK, "FAKE_LAST_MESSAGE": text}
     _, event = run_task_with(kit, tool, fake)
@@ -188,7 +237,7 @@ EMIT_TERMINAL_ATTEMPTS = [
 ]
 
 
-@pytest.mark.parametrize("tool", ["claude", "opencode", "codex"])
+@pytest.mark.parametrize("tool", ["claude", "opencode", "codex", "dsh"])
 def test_exactly_one_terminal_per_task(kit: Kit, tool: str) -> None:
     result = kit.run(
         "--tool", tool, "--target", "bot-a", "--label", "um", "--", "faça", FAKE_EMIT=json.dumps(EMIT_TERMINAL_ATTEMPTS)
@@ -367,6 +416,7 @@ ELIGIBILITY = [
     ("claude", [claude_result(terminal_reason="max_turns")], None, False),
     ("claude", [claude_result(is_error=False)], None, False),
     ("codex", [{"type": "turn.failed", "error": {"message": "boom"}}], None, False),
+    ("dsh", [{"type": "status", "phase": "turn_end", "reason": {"kind": "error"}}], None, False),
     ("opencode", [ERROR_119], "timeout", False),
     ("claude", [claude_result()], "interrupted", False),
 ]

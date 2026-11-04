@@ -55,6 +55,26 @@ def _error_message(tool: str, objects: list[dict[str, Any]]) -> str:
     return ""
 
 
+def _dsh_turn_error(objects: list[dict[str, Any]]) -> str:
+    """A mensagem do último erro do dsh: um evento `error` ou um `turn_end` cujo motivo não foi `completed`."""
+    for obj in reversed(objects):
+        kind = obj.get("type")
+        if kind == "error":
+            message = obj.get("message")
+            return message if isinstance(message, str) else ""
+        if kind == "status" and obj.get("phase") == "turn_end":
+            reason = obj.get("reason")
+            if isinstance(reason, dict) and reason.get("kind") != "completed":
+                error = reason.get("error")
+                if isinstance(error, dict):
+                    code = error.get("code")
+                    message = error.get("message")
+                    return ": ".join(p for p in (code, message) if isinstance(p, str) and p)
+                return str(reason.get("kind") or "")
+            return ""
+    return ""
+
+
 def read_output(tool: str, task_dir: Path) -> AgentOutput:
     """Lê `out.jsonl` (e `last-message.txt` do codex) do task dir."""
     objects = _json_objects(_read(task_dir / "out.jsonl"))
@@ -80,6 +100,12 @@ def read_output(tool: str, task_dir: Path) -> AgentOutput:
         texts = [t for t in texts if isinstance(t, str)]
         summary = texts[-1] if texts else _error_message(tool, objects)
         session_id = next((o["sessionID"] for o in objects if o.get("sessionID")), None)
+    elif tool == "dsh":
+        error = any(o.get("type") == "error" for o in objects) or bool(_dsh_turn_error(objects))
+        final = [o.get("text") for o in reversed(objects) if o.get("type") == "final"]
+        texts = [o.get("text") for o in reversed(objects) if o.get("type") == "text"]
+        summary = next((t for t in (*final, *texts) if isinstance(t, str)), "") or _dsh_turn_error(objects)
+        session_id = next((o.get("sessionId") for o in objects if o.get("type") == "session"), None)
     return AgentOutput(
         error=error,
         permission_denied=denied,
@@ -90,7 +116,7 @@ def read_output(tool: str, task_dir: Path) -> AgentOutput:
 
 def fallback_eligible(tool: str, task_dir: Path, stopped: str | None) -> bool:
     """A tentativa falhou no provedor antes de qualquer ferramenta e pode ir para o próximo id do tier (door 4 da
-    model-setup-docs). O codex nunca: nenhuma saída de erro de provedor dele foi observada."""
+    model-setup-docs). O codex nunca: nenhuma saída de erro de provedor dele foi observada; o dsh também não."""
     if stopped is not None:
         return False
     objects = _json_objects(_read(task_dir / "out.jsonl"))

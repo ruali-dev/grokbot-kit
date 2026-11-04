@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-SOURCES = ("opencode", "claude", "codex")
+SOURCES = ("opencode", "claude", "codex", "dsh")
 _SAFE_ID = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
 
 
@@ -81,6 +81,10 @@ def normalize(source: str, data: object) -> dict[str, str | None] | None:
             "session_id": _str(props.get("sessionID")),
             "transcript_path": None,
         }
+    if source == "dsh":
+        # o perfil headless do dsh 0.2.1-rc.5 não instala hooks nem pede aprovação com `danger-full-access`; um
+        # formato desconhecido é ignorado em vez de virar um `needs_input` inventado
+        return None
     return None
 
 

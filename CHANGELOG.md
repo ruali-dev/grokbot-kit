@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- DeepSeek Harness (`dsh`) as a fourth tool: `grokbot-kit run --tool dsh` launches
+  `dsh --profile headless --json <task>` with `DSH_PERMISSION_MODE=danger-full-access` and stdin on `/dev/null`, then
+  classifies the NDJSON (`session`, `status`, `text`, `tool_call`, `tool_result`, `final`, `error`) into the same
+  terminal events. The headless default is DeepSeek V4.1-Flash (`deepseek-flash`, provider `deepseek-official`); the
+  kit does not rewrite the shared `~/.dsh` profile for a different `--model`. `setup cli add dsh` detects an existing
+  Node.js 24 binary instead of downloading one, seeds the three tiers with Flash, `login dsh --method api-key` writes
+  `DEEPSEEK_API_KEY` to `$DSH_HOME/.env` with mode `0600`, and `doctor` reads that file without printing the key.
+  `setup models refresh dsh` records the known ids `deepseek-flash` and `deepseek-chat`. Plugins stay unsupported in
+  v1, with the same clear `cannot enforce` error as any CLI without a harness.
+
 ## [0.6.0] - 2026-10-30
 
 ### Added

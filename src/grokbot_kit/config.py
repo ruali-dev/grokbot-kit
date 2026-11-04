@@ -8,7 +8,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from grokbot_kit.launch import DEFAULT_CODEX_HOME
+from grokbot_kit.launch import DEFAULT_CODEX_HOME, DEFAULT_DSH_HOME
 
 
 class ConfigError(Exception):
@@ -125,11 +125,41 @@ def save(cfg: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def dsh_home(cli: dict[str, Any]) -> Path:
+    """O `$DSH_HOME` da tarefa: `cli.dsh.dsh_home`, depois `$DSH_HOME`, depois `~/.dsh`."""
+    configured = cli.get("dsh_home") or os.environ.get("DSH_HOME", "").strip() or DEFAULT_DSH_HOME
+    return Path(os.path.expanduser(str(configured)))
+
+
+def dsh_env_file(cli: dict[str, Any]) -> Path:
+    return dsh_home(cli) / ".env"
+
+
+def dsh_api_key_present(cli: dict[str, Any]) -> bool:
+    """Se `DEEPSEEK_API_KEY` está no ambiente ou no `.env` do dsh, sem ler o valor para fora daqui."""
+    if os.environ.get("DEEPSEEK_API_KEY", "").strip():
+        return True
+    try:
+        lines = dsh_env_file(cli).read_text(encoding="utf-8").splitlines()
+    except (FileNotFoundError, OSError):
+        return False
+    for line in lines:
+        name, sep, value = line.partition("=")
+        if sep and name.strip() == "DEEPSEEK_API_KEY" and value.strip().strip("\"'").strip():
+            return True
+    return False
+
+
 def cli_env(tool: str, cli: dict[str, Any]) -> dict[str, str]:
-    """O env que só os processos da CLI `tool` recebem: `CODEX_HOME` do kit (door 7) e, no Claude com login por API
-    key, `ANTHROPIC_API_KEY` lido do segredo de `api_key_secret` (door 20)."""
+    """O env que só os processos da CLI `tool` recebem: `CODEX_HOME` do kit (door 7), o modo de permissão do dsh e,
+    no Claude com login por API key, `ANTHROPIC_API_KEY` lido do segredo de `api_key_secret` (door 20)."""
     if tool == "codex":
         return {"CODEX_HOME": os.path.expanduser(str(cli.get("codex_home", DEFAULT_CODEX_HOME)))}
+    if tool == "dsh":
+        env = {"DSH_PERMISSION_MODE": "danger-full-access"}
+        if "dsh_home" in cli:
+            env["DSH_HOME"] = str(dsh_home(cli))
+        return env
     if tool == "claude" and "api_key_secret" in cli:
         return {"ANTHROPIC_API_KEY": read_secret(str(cli["api_key_secret"]))}
     return {}

@@ -33,7 +33,7 @@ agent stops at a permission prompt or a question. `grokbot-kit route test` sends
 | `task_id` | string | the id of the task, also the name of its task dir `~/.grokbot-kit/tasks/<task_id>/`; `null` in `test` |
 | `task_label` | string | the `--label` given to `grokbot-kit run`; `null` in `test` |
 | `target` | string | the bot whose route received the event (`--target`) |
-| `tool` | string | `opencode`, `claude` or `codex`; `null` in `test` |
+| `tool` | string | `opencode`, `claude`, `codex` or `dsh`; `null` in `test` |
 | `model` | string | the model id that ran last; `null` in `test` |
 | `model_source` | string | where the model came from: `user` (`--model`), `tier` (`--tier`) or `default`; `null` in `test` |
 | `model_fallbacks` | list | one `{"model", "error"}` per attempt of a tier that failed at the provider and led to the next id; `[]` without fallback, `null` in `test` |
