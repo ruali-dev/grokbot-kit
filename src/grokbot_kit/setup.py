@@ -2,6 +2,7 @@
 `setup providers` (doors 2 e 3 da model-setup-docs)."""
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any, NamedTuple
 
 from grokbot_kit import config
 from grokbot_kit.launch import DEFAULT_CODEX_HOME
-from grokbot_kit.models import provider
+from grokbot_kit.models import DSH_DEFAULT_MODEL, provider
 
 INSTALL_TIMEOUT = 900
 VERSION_TIMEOUT = 60
@@ -34,6 +35,10 @@ def installer(tool: str, home: Path, codex_home: Path) -> Installer:
         bin_dir = home / ".grokbot-kit" / "bin"
         env = {"CODEX_HOME": str(codex_home), "CODEX_INSTALL_DIR": str(bin_dir)}
         return Installer(["sh", "-c", "curl -fsSL https://chatgpt.com/codex/install.sh | sh"], env, bin_dir / "codex")
+    if tool == "dsh":
+        # o DeepSeek Harness se instala pelo Node; o kit só descobre o binário que já existe
+        found = shutil.which("dsh")
+        return Installer([], {}, Path(found).absolute() if found else home / ".local" / "bin" / "dsh")
     raise ValueError(f"unknown tool: {tool}")
 
 
@@ -64,19 +69,28 @@ def cli_add(tool: str) -> int:
     if tool == "codex":
         # com o diretório no `PATH`, o instalador do Codex não edita o perfil do shell
         env["PATH"] = os.pathsep.join([inst.env["CODEX_INSTALL_DIR"], env.get("PATH", "")])
-    try:
-        proc = subprocess.run(
-            inst.argv, stdin=subprocess.DEVNULL, stdout=sys.stderr, env=env, timeout=INSTALL_TIMEOUT, check=False
-        )
-    except (OSError, subprocess.TimeoutExpired) as e:
-        _err(f"{tool} installer failed: {e}")
-        return 1
-    if proc.returncode != 0:
-        _err(f"{tool} installer exited {proc.returncode}; config not changed")
-        return 1
+    if tool == "dsh":
+        if not inst.bin.is_file():
+            _err(
+                f"dsh not found at {inst.bin} or on PATH; install DeepSeek Harness (Node.js 24) first, "
+                "for example: npm install -g @deepseek-ai/dsh; config not changed"
+            )
+            return 1
+    else:
+        try:
+            proc = subprocess.run(
+                inst.argv, stdin=subprocess.DEVNULL, stdout=sys.stderr, env=env, timeout=INSTALL_TIMEOUT, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            _err(f"{tool} installer failed: {e}")
+            return 1
+        if proc.returncode != 0:
+            _err(f"{tool} installer exited {proc.returncode}; config not changed")
+            return 1
+    version_argv = [str(inst.bin), "-V"] if tool == "dsh" else [str(inst.bin), "--version"]
     try:
         version = subprocess.run(
-            [str(inst.bin), "--version"],
+            version_argv,
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
@@ -86,12 +100,17 @@ def cli_add(tool: str) -> int:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as e:
-        _err(f"{inst.bin} --version failed: {e}; config not changed")
+        _err(f"{inst.bin} {' '.join(version_argv[1:])} failed: {e}; config not changed")
         return 1
     if version.returncode != 0:
-        _err(f"{inst.bin} --version exited {version.returncode}; config not changed")
+        _err(f"{inst.bin} {' '.join(version_argv[1:])} exited {version.returncode}; config not changed")
         return 1
     cli["bin"] = str(inst.bin)
+    if tool == "dsh":
+        # o perfil headless já usa o modelo Flash; o tier padrão parte dele para a tarefa rodar após o setup
+        cli.setdefault("models", [DSH_DEFAULT_MODEL])
+        for tier in ("trivial", "standard", "complex"):
+            cli.setdefault("tiers", {}).setdefault(tier, [DSH_DEFAULT_MODEL])
     cfg.setdefault("cli", {})[tool] = cli
     setup = cfg.setdefault("setup", {})
     setup.setdefault("version", 1)

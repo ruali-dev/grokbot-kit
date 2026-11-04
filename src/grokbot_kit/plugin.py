@@ -64,7 +64,9 @@ def matrix() -> dict[str, dict[str, str]]:
     """A matriz da door 8: `{cli: {capacidade: os|tool|unsupported}}`; `GROKBOT_KIT_CAPABILITIES` troca o arquivo."""
     path = os.environ.get("GROKBOT_KIT_CAPABILITIES") or MATRIX_PATH
     data: dict[str, dict[str, str]] = json.loads(Path(path).read_text(encoding="utf-8"))
-    cells = {tool: {column: data[tool][column] for column in MATRIX_COLUMNS} for tool in TOOLS}
+    cells = {
+        tool: {column: data.get(tool, {}).get(column, "unsupported") for column in MATRIX_COLUMNS} for tool in TOOLS
+    }
     # uma CLI que não confina a escrita ou não ignora a config do workspace fica fora de toda tarefa de plugin (AC 7)
     for row in cells.values():
         if "unsupported" in (row["write"], row["workspace_config"]):

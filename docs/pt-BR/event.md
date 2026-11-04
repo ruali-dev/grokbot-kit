@@ -33,7 +33,7 @@ com os campos de tarefa `null`.
 | `task_id` | string | o id da tarefa, também o nome do task dir `~/.grokbot-kit/tasks/<task_id>/`; `null` no `test` |
 | `task_label` | string | o `--label` passado ao `grokbot-kit run`; `null` no `test` |
 | `target` | string | o bot cuja rota recebeu o evento (`--target`) |
-| `tool` | string | `opencode`, `claude` ou `codex`; `null` no `test` |
+| `tool` | string | `opencode`, `claude`, `codex` ou `dsh`; `null` no `test` |
 | `model` | string | o id do modelo que rodou por último; `null` no `test` |
 | `model_source` | string | de onde veio o modelo: `user` (`--model`), `tier` (`--tier`) ou `default`; `null` no `test` |
 | `model_fallbacks` | lista | um `{"model", "error"}` por tentativa de um tier que falhou no provedor e levou ao próximo id; `[]` sem fallback, `null` no `test` |

@@ -79,7 +79,7 @@ def norm(s: str) -> str:
 def test_frontmatter_name_and_triggers() -> None:
     fm = frontmatter()
     assert fm["name"] == "grokbot-kit"
-    for trigger in ("configurar grokbot-kit", "delegar para opencode/claude/codex", "rodar tarefa headless"):
+    for trigger in ("configurar grokbot-kit", "delegar para opencode/claude/codex/dsh", "rodar tarefa headless"):
         assert f'"{trigger}"' in fm["description"], trigger
 
 
@@ -104,7 +104,7 @@ def test_single_multichoice_cli_question() -> None:
     assert "`setup.installed` vazio no `grokbot-kit doctor --json`" in p
     assert "uma única pergunta" in p
     assert "múltipla escolha" in p
-    for tool in ("`opencode`", "`claude`", "`codex`"):
+    for tool in ("`opencode`", "`claude`", "`codex`", "`dsh`"):
         assert tool in p, tool
 
 

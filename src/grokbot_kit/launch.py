@@ -10,8 +10,9 @@ import sys
 from pathlib import Path
 from typing import Any, NamedTuple
 
-TOOLS = ("opencode", "claude", "codex")
+TOOLS = ("opencode", "claude", "codex", "dsh")
 DEFAULT_CODEX_HOME = "~/.grokbot-kit/codex-home"
+DEFAULT_DSH_HOME = "~/.dsh"
 
 
 def kit_executable() -> str:
@@ -127,6 +128,9 @@ def agent_argv(tool: str, bin_path: str, model: str, task_dir: Path, kit_exe: st
         last_message = str(task_dir / "last-message.txt")
         head = ["exec", "--json", "-m", model, "-o", last_message, "--dangerously-bypass-hook-trust"]
         head += ["-c", codex_hooks_override(kit_exe)]
+    elif tool == "dsh":
+        # o dsh junta as palavras da tarefa com espaço; o modelo vem do perfil headless (`deepseek-flash`)
+        return [bin_path, "--profile", "headless", "--json", " ".join(extras)]
     else:
         raise ValueError(f"unknown tool: {tool}")
     return [bin_path, *head, *extras]

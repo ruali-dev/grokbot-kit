@@ -18,7 +18,12 @@ from conftest import Kit, default_config
 from grokbot_kit import emit
 
 CLAUDE_OK = json.dumps({"type": "result", "is_error": False, "result": "feito", "permission_denials": []})
-STDOUT_OK = {"claude": CLAUDE_OK, "opencode": "", "codex": ""}
+DSH_OK = (
+    json.dumps({"type": "session", "sessionId": "session-1", "cwd": "/w"})
+    + "\n"
+    + json.dumps({"type": "final", "text": "feito"})
+)
+STDOUT_OK = {"claude": CLAUDE_OK, "opencode": "", "codex": "", "dsh": DSH_OK}
 
 
 def claude_hook(**extra: Any) -> dict[str, Any]:
@@ -439,3 +444,16 @@ def test_importtime_gate_and_stdlib_only_hook_path_before_gate(kit: Kit) -> None
     env = env_without_task(kit)
     modules = imported_modules(env, "-c", code) - imported_modules(env, "-c", "import os, sys, json")
     assert modules <= {"grokbot_kit", "grokbot_kit.cli", "grokbot_kit.emit"}
+
+
+def test_dsh_has_no_hook_source_layer() -> None:
+    assert emit.normalize("dsh", {"type": "question", "question": "Qual nome?"}) is None
+    assert emit.normalize("dsh", {"hook_event_name": "PermissionRequest", "tool_name": "Bash"}) is None
+
+
+def test_dsh_has_no_hook_source_cli(kit: Kit) -> None:
+    _, env = finished_task(kit, "dsh")
+    result = emit_process(env, "dsh", json.dumps({"type": "question", "question": "Qual nome?"}), kit.home)
+    assert result.returncode == 0
+    assert result.stdout in ("", "{}")
+    assert [e["event"] for e in kit.sink_events()].count("needs_input") == 0

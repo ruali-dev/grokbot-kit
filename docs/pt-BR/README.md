@@ -2,8 +2,8 @@
 
 > Read in English: [README.md](../../README.md)
 
-Kit de integração Grok Bot: delega tarefas a agentes de código headless (opencode, Claude Code, Codex) e acorda a
-routine do Grok Bot certo quando a tarefa termina ou precisa de uma permissão.
+Kit de integração Grok Bot: delega tarefas a agentes de código headless (opencode, Claude Code, Codex, DeepSeek
+Harness) e acorda a routine do Grok Bot certo quando a tarefa termina ou precisa de uma permissão.
 
 **Estado:** `0.x`. Os comandos abaixo funcionam; o schema de evento `grokbot-kit.event/v1` ainda pode mudar, sempre
 com uma entrada no [CHANGELOG](../../CHANGELOG.md).
@@ -92,6 +92,19 @@ grokbot-kit route test meubot
 grokbot-kit run --target meubot --label renomear-vars -- "Renomeie as variáveis de x.py"
 ```
 
+O DeepSeek Harness é instalado com Node.js 24, sem instalador do kit; o kit detecta um `dsh` que já existe:
+
+```sh
+grokbot-kit setup cli add dsh
+grokbot-kit login dsh --method api-key
+grokbot-kit setup default dsh
+grokbot-kit run --target meubot --label smoke -- "Responda exatamente: pong"
+```
+
+O perfil `headless` do `dsh` roda com `DSH_PERMISSION_MODE=danger-full-access` e usa por padrão o modelo Flash
+(`deepseek-flash`, provedor `deepseek-official`). `--model` ainda registra o id pedido no evento, mas a v1 não
+reescreve o perfil compartilhado em `~/.dsh` para trocar o modelo.
+
 ## Skill do Grok Bot
 
 `skills/grokbot-kit/` é uma skill para qualquer Grok Bot. Copie a pasta para o diretório de workflows do bot e ele
@@ -107,8 +120,8 @@ tarefas escolhendo CLI e modelo.
 | `grokbot-kit redeliver <task_id>` | reenvia os eventos de uma tarefa que não foram entregues |
 | `grokbot-kit gc --older-than <duração>` | remove os task dirs de tarefas que terminaram há muito tempo; `--dry-run` só lista |
 | `grokbot-kit route add <bot>` | `add` liga um bot ao webhook da routine dele (URL e key de dois segredos), `rm` remove a rota, `test` envia um evento `test` |
-| `grokbot-kit setup cli add <tool>` | configura as CLIs: `cli add` instala uma com o instalador oficial, `default` escolhe a usada quando a tarefa não diz, `models refresh` descobre os ids de modelo, `providers` escolhe os provedores do opencode e `tiers` grava os ids de um tier (veja [Modelos](#modelos)) |
-| `grokbot-kit login <tool>` | faz o login de uma CLI com o comando oficial dela, por assinatura ou API key (`--method`) |
+| `grokbot-kit setup cli add <tool>` | configura as CLIs: `cli add` instala uma com o instalador oficial (`dsh` é detectado, não baixado), `default` escolhe a usada quando a tarefa não diz, `models refresh` descobre os ids de modelo, `providers` escolhe os provedores do opencode e `tiers` grava os ids de um tier (veja [Modelos](#modelos)) |
+| `grokbot-kit login <tool>` | faz o login de uma CLI com o comando oficial dela, por assinatura ou API key (`--method`); o `dsh` usa API key e grava `$DSH_HOME/.env` |
 | `grokbot-kit doctor` | confere versões, CLIs, logins, rotas, segredos e plugins, com o comando que corrige cada problema; `--json` para o bot |
 | `grokbot-kit install opencode` | instala o plugin do opencode que avisa dos pedidos de permissão (inerte fora de uma tarefa) |
 | `grokbot-kit uninstall opencode` | remove o plugin do opencode |
@@ -124,7 +137,8 @@ tarefas escolhendo CLI e modelo.
   passado ao agente depois dos argumentos que seguem o `--`.
 - `emit --from <tool>` diz de qual CLI é o hook que chama.
 - `route add --header 'Nome: valor'` acrescenta um header a toda requisição da rota; repetível.
-- `setup models refresh --add <id>` (`claude` e `codex`) também testa e grava um id que a descoberta não lista.
+- `setup models refresh --add <id>` (`claude`, `codex` e `dsh`) também testa e grava um id que a descoberta não
+  lista; no `dsh`, os ids conhecidos são a checagem leve.
 - `login --secret <nome>` diz o segredo que guarda a API key (padrão: `<tool>-api-key`).
 
 ## Plugins
@@ -160,8 +174,12 @@ grokbot-kit setup tiers opencode standard <id> <id>
 `grokbot-kit run --tier <tier>` lança o primeiro id do tier. Quando o provedor falha antes de o agente usar qualquer
 ferramenta (opencode: um `error` sem `tool_use`; Claude Code: um `api_error` no primeiro turno), o kit lança o próximo
 id na mesma tarefa, dentro do mesmo timeout. O evento diz em `model` o modelo que rodou por último e lista em
-`model_fallbacks` os que falharam, com o motivo. Um modelo dado com `--model` nunca é trocado, e o Codex nunca tenta
-outro. Quando a tarefa falha sem mensagem final do agente, o `summary` traz o erro da CLI.
+`model_fallbacks` os que falharam, com o motivo. Um modelo dado com `--model` nunca é trocado, e o Codex e o `dsh`
+nunca tentam outro. Quando a tarefa falha sem mensagem final do agente, o `summary` traz o erro da CLI.
+
+`setup cli add dsh` grava os ids conhecidos `deepseek-flash` e `deepseek-chat` e põe `deepseek-flash` nos três tiers,
+então um setup novo roda Flash a menos que você escolha outro id. `grokbot-kit setup models refresh dsh` não chama
+nenhum comando de modelos ao vivo. O perfil `headless` é a fonte do modelo real; para a v1, mantenha o Flash padrão.
 
 ## Evento
 
@@ -180,7 +198,8 @@ O config fica em `~/.config/grokbot-kit/config.toml`: CLIs instaladas e a padrã
 - Segredos (URL e key da routine, API keys) são gravados com `grokbot-kit secret set` em `~/.secrets/grokbot-kit/`
   com modo `0600`, nunca no config e nunca colados num chat.
 - O `grokbot-kit` nunca escreve um segredo em log, stdout, stderr ou evento.
-- `~/.claude/settings.json` e `~/.codex/` nunca são modificados; o Codex roda num `CODEX_HOME` próprio.
+- `~/.claude/settings.json`, `~/.codex/` e `~/.dsh` nunca são modificados por uma tarefa; o Codex roda num
+  `CODEX_HOME` próprio, e o `login dsh` só grava `DEEPSEEK_API_KEY` no `.env` do dsh com modo `0600`.
 
 ## Contribuindo
 

@@ -24,7 +24,7 @@ def kit_exe() -> str:
 
 
 # C42 - AC 39
-@pytest.mark.parametrize("tool", ["claude", "opencode", "codex"])
+@pytest.mark.parametrize("tool", ["claude", "opencode", "codex", "dsh"])
 def test_child_stdin_is_devnull(kit: Kit, tool: str) -> None:
     result = kit.run("--tool", tool, "--target", "bot-a", "--label", "stdin", "--", "oi")
     assert result.returncode == 0, result.stderr
@@ -91,6 +91,22 @@ def test_opencode_argv(kit: Kit) -> None:
 def test_opencode_argv_layer(tmp_path: Path) -> None:
     argv = launch.agent_argv("opencode", "/bin/opencode", "opencode/m", tmp_path, "/opt/gk/grokbot-kit", ["oi"])
     assert argv == ["/bin/opencode", "run", "--format", "json", "-m", "opencode/m", "oi"]
+
+
+# C45b - dsh headless (sem hooks: o perfil headless não aceita --model em 0.2.1-rc.5)
+def test_dsh_argv_env(kit: Kit) -> None:
+    result = kit.run("--tool", "dsh", "--target", "bot-a", "--label", "dsh", "--", "oi", "mundo")
+    assert result.returncode == 0, result.stderr
+    launched = kit.launched()
+    assert launched["argv"] == ["--profile", "headless", "--json", "oi mundo"]
+    assert launched["stdin_target"] == "/dev/null"
+    assert launched["env"]["DSH_PERMISSION_MODE"] == "danger-full-access"
+
+
+def test_dsh_argv_env_layer(tmp_path: Path) -> None:
+    argv = launch.agent_argv("dsh", "/bin/dsh", "deepseek-flash", tmp_path, "/opt/gk/grokbot-kit", ["oi", "mundo"])
+    assert argv == ["/bin/dsh", "--profile", "headless", "--json", "oi mundo"]
+    assert launch.agent_argv("dsh", "/bin/dsh", "deepseek-flash", tmp_path, "/opt/gk", [])[-1] == ""
 
 
 # C45 - AC 42, door 7
